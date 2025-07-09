@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "STORAGE_ACCOUNT_NAME": "<your-storage-account-name>",
+    "PAGES_PER_CHUNK": "10"
+  }
+}

@@ -1,48 +1,50 @@
-bin
-obj
-csx
-.vs
-edge
-Publish
+# Ignore everything by default
+*
 
-*.user
-*.suo
-*.cscfg
-*.Cache
-project.lock.json
+# Don't ignore directories, to be able to recursively whitelist files
+!*/
 
-/packages
-/TestResults
+# Whitelist essential files for the initial phase
+!.funcignore
+!.gitignore
+!host.json
+!local.settings.json
+!local.settings.example.json
+!package.json
+!package-lock.json
+!PDF-CHUNKER-README.md
+!README.md
+!tsconfig.json
 
-/tools/NuGet.exe
-/App_Data
-/secrets
-/data
-.secrets
-appsettings.json
-local.settings.json
+# Essential functions
+!src/functions/pdfchunker/PDFChunker.ts
+!src/models/DocumentChunk.ts
+!src/models/Document.ts
+!scripts/test-simple-pdf-chunker.js
+!src/functions/services/indexing/SearchIndexManager.ts
+!src/functions/services/indexing/SearchDataIndexer.ts
+!src/functions/services/indexing/EmbeddingsGenerator.ts
 
-node_modules
-dist
+# Essential frontend
+!src/frontend/app/page.tsx
+!src/frontend/app/layout.tsx
+!src/frontend/app/globals.css
+!src/frontend/components/chat-interface.tsx
+!src/frontend/components/message-bubble.tsx
+!src/frontend/components/ui/button.tsx
+!src/frontend/components/ui/input.tsx
+!src/frontend/lib/services/chatbot-service.ts
+!src/frontend/lib/services/api-client.ts
+!src/frontend/lib/services/index.ts
+!src/frontend/package.json
+!src/frontend/tsconfig.json
+!src/frontend/next.config.js
+!src/frontend/tailwind.config.js
+!src/frontend/postcss.config.js
 
-# Local python packages
-.python_packages/
-
-# Python Environments
+# Still ignore node_modules and build files
+node_modules/
+dist/
 .env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Azurite artifacts
-__blobstorage__
-__queuestorage__
-__azurite_db*__.json
+.env.local
+.next/
