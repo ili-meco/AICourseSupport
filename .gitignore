@@ -18,12 +18,14 @@
 
 # Essential functions
 !src/functions/pdfchunker/PDFChunker.ts
+!src/functions/indexing/PDFIndexer.ts
 !src/models/DocumentChunk.ts
 !src/models/Document.ts
 !scripts/test-simple-pdf-chunker.js
 !src/functions/services/indexing/SearchIndexManager.ts
 !src/functions/services/indexing/SearchDataIndexer.ts
 !src/functions/services/indexing/EmbeddingsGenerator.ts
+!src/functions/services/utils/retryUtils.ts
 
 # Essential frontend
 !src/frontend/app/page.tsx

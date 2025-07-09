@@ -4,6 +4,15 @@
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "STORAGE_ACCOUNT_NAME": "<your-storage-account-name>",
-    "PAGES_PER_CHUNK": "10"
+    "PAGES_PER_CHUNK": "10",
+    
+    "AZURE_SEARCH_ENDPOINT": "https://<your-search-service>.search.windows.net",
+    "AZURE_SEARCH_INDEX_NAME": "document-chunks",
+    "AZURE_SEARCH_API_KEY": "<your-search-api-key>",
+    
+    "AZURE_OPENAI_ENDPOINT": "https://<your-openai-service>.openai.azure.com/",
+    "AZURE_OPENAI_API_KEY": "<your-openai-api-key>",
+    "AZURE_OPENAI_EMBEDDING_DEPLOYMENT": "text-embedding-ada-002",
+    "AZURE_OPENAI_COMPLETION_DEPLOYMENT": "<your-completion-model-name>"
   }
 }
