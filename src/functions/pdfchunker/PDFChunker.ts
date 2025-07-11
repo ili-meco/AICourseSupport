@@ -5,13 +5,13 @@
 
 import { app, InvocationContext } from "@azure/functions";
 import { BlobServiceClient, BlockBlobClient } from "@azure/storage-blob";
-import { DefaultAzureCredential } from "@azure/identity";
 import { PDFDocument } from 'pdf-lib';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { DocumentChunk } from "../../models/DocumentChunk";
+import pdfParse from 'pdf-parse';
 
 /**
  * Azure Function triggered by Blob Storage events when a new PDF is uploaded
@@ -40,20 +40,18 @@ async function pdfChunkerFunction(blob: unknown, context: InvocationContext): Pr
     }
     
     // Get configuration from environment variables
-    const storageAccountName = process.env.STORAGE_ACCOUNT_NAME;
-    const outputContainerName = "student-tools-chunked"; // Fixed container name
+    const outputContainerName = "students-tools-chunked"; // Fixed container name
     const pagesPerChunk = parseInt(process.env.PAGES_PER_CHUNK || '10');
     
-    if (!storageAccountName) {
-      throw new Error("Missing required environment variable: STORAGE_ACCOUNT_NAME");
+    // Connect to Azure services using connection string
+    context.log('Connecting to storage account using connection string');
+    const connectionString = process.env.AzureWebJobsStorage;
+    
+    if (!connectionString) {
+      throw new Error("Missing required environment variable: AzureWebJobsStorage");
     }
     
-    // Connect to Azure services using Managed Identity
-    const credential = new DefaultAzureCredential();
-    const blobServiceClient = new BlobServiceClient(
-      `https://${storageAccountName}.blob.core.windows.net`,
-      credential
-    );
+    const blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
     
     // Get container clients
     const inputContainerClient = blobServiceClient.getContainerClient(containerName);
@@ -62,6 +60,40 @@ async function pdfChunkerFunction(blob: unknown, context: InvocationContext): Pr
     // Ensure output container exists
     await outputContainerClient.createIfNotExists();
     
+    // Check if this blob has already been processed
+    const sourceBlobClient = inputContainerClient.getBlobClient(blobName);
+    const properties = await sourceBlobClient.getProperties();
+    const metadata = properties.metadata || {};
+    
+    // Prepare to check if chunks actually exist for this file
+    const fileBaseName = path.basename(blobName, '.pdf');
+    const chunkPrefix = `${fileBaseName}_chunk_`;
+    
+    // Check if the file is marked as processed
+    if (metadata.processed === "true") {
+      context.log(`File ${blobName} is marked as processed, verifying chunks exist...`);
+      
+      // Try to find at least one chunk in the output container
+      let chunksExist = false;
+      try {
+        // List blobs with the chunk prefix
+        const chunkIterator = outputContainerClient.listBlobsFlat({ prefix: chunkPrefix });
+        const firstChunk = await chunkIterator.next();
+        
+        // If we found at least one chunk, the file was indeed processed
+        chunksExist = !firstChunk.done;
+        
+        if (chunksExist) {
+          context.log(`Chunks found for ${blobName}, skipping processing`);
+          return;
+        } else {
+          context.log(`No chunks found for ${blobName} despite being marked as processed, will reprocess`);
+        }
+      } catch (error) {
+        context.log(`Error checking for existing chunks: ${error.message}, will reprocess file`);
+      }
+    }
+
     // Download the PDF to a temporary file
     const tempFilePath = await downloadBlob(inputContainerClient, blobName);
     context.log(`PDF downloaded to temporary file: ${tempFilePath}`);
@@ -140,6 +172,10 @@ async function splitPdfIntoChunks(
     
     context.log(`PDF has ${numPages} pages, splitting into chunks of ${pagesPerChunk} pages`);
     
+    // Extract full PDF text for later use in chunks
+    const fullPdfText = await extractTextFromPDF(pdfBytes);
+    context.log(`Extracted ${fullPdfText.length} characters of text from the PDF`);
+    
     // Calculate chunk boundaries with overlap
     const overlap = Math.floor(pagesPerChunk / 2);
     const chunks: Array<{startPage: number, endPage: number}> = [];
@@ -182,6 +218,10 @@ async function splitPdfIntoChunks(
       const chunkTempPath = path.join(os.tmpdir(), chunkBlobName);
       fs.writeFileSync(chunkTempPath, chunkPdfBytes);
       
+      // Extract text from the chunk
+      const chunkText = await extractTextFromPDF(chunkPdfBytes);
+      context.log(`Extracted ${chunkText.length} characters from chunk ${i + 1}`);
+      
       // Create a unique ID for this chunk
       const chunkId = `${documentId}-chunk-${i + 1}`;
       
@@ -190,7 +230,7 @@ async function splitPdfIntoChunks(
         id: chunkId,
         documentId: documentId,
         filename: filename,
-        content: `PDF chunk containing pages ${chunk.startPage + 1} to ${chunk.endPage}`,
+        content: chunkText || `PDF chunk containing pages ${chunk.startPage + 1} to ${chunk.endPage}`, // Use extracted text or fallback to placeholder
         chunkIndex: i,
         contentType: 'pdf',
         location: {
@@ -268,9 +308,24 @@ async function splitPdfIntoChunks(
   }
 }
 
+/**
+ * Extract text from PDF buffer
+ */
+async function extractTextFromPDF(pdfBuffer: Buffer | Uint8Array): Promise<string> {
+  try {
+    // pdf-parse expects a Buffer, so convert if needed
+    const buffer = Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
+    const data = await pdfParse(buffer);
+    return data.text || '';
+  } catch (error: any) {
+    console.error(`Error extracting text from PDF: ${error.message}`);
+    return ''; // Return empty string on failure
+  }
+}
+
 // Register the function with Azure Functions
-app.storageBlob('pdfChunker', {
+app.storageBlob('BlobTriggerPDFChunker', {
   connection: "AzureWebJobsStorage",
-  path: "student-tools/{name}.pdf",
+  path: "students-tools/{name}",
   handler: pdfChunkerFunction
 });

@@ -49,7 +49,45 @@ module.exports = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      perspective: {
+        '1000': '1000px',
+      },
+      rotate: {
+        'y-180': 'rotateY(180deg)',
+        'y-0': 'rotateY(0deg)',
+      },
+      transformStyle: {
+        '3d': 'preserve-3d',
+      },
+      backfaceVisibility: {
+        'hidden': 'hidden',
+      },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    function({ addUtilities }) {
+      const newUtilities = {
+        '.perspective': {
+          perspective: '1000px',
+        },
+        '.perspective-1000': {
+          perspective: '1000px',
+        },
+        '.transform-style-3d': {
+          transformStyle: 'preserve-3d',
+        },
+        '.backface-hidden': {
+          backfaceVisibility: 'hidden',
+        },
+        '.rotate-y-180': {
+          transform: 'rotateY(180deg)',
+        },
+        '.rotate-y-0': {
+          transform: 'rotateY(0deg)',
+        },
+      }
+      addUtilities(newUtilities)
+    },
+  ],
 }

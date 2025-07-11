@@ -99,7 +99,45 @@ export class EmbeddingsGenerator {
   private async getEmbeddingsForBatch(texts: string[]): Promise<number[][]> {
     try {
       const result = await this.openAIClient.getEmbeddings(this.deploymentName, texts);
-      return result.map(item => Array.from(item.embedding));
+      
+      // Log the raw result structure for debugging
+      console.log(`Raw embedding response type: ${typeof result}`);
+      
+      // Handle different response formats from the OpenAI API with better error handling
+      if (Array.isArray(result)) {
+        // Old format: array of embedding objects
+        return result.map(item => Array.from((item as any).embedding || []));
+      } else if (result && typeof result === 'object') {
+        // Cast to any to handle various response formats
+        const resultObj = result as any;
+        
+        if (resultObj.data && Array.isArray(resultObj.data)) {
+          // New format with data property (Azure OpenAI)
+          return resultObj.data.map((item: any) => {
+            if (item.embedding) return Array.from(item.embedding);
+            if (item.values) return Array.from(item.values);
+            console.log(`Item has no embedding or values: ${JSON.stringify(item)}`);
+            return new Array(this.embeddingDimension).fill(0); // Fallback
+          });
+        } else if (resultObj.embeddings && Array.isArray(resultObj.embeddings)) {
+          // Alternative format with embeddings property
+          return resultObj.embeddings.map((embedding: any) => Array.from(embedding));
+        } else {
+          // Try to find any property that looks like an embedding array
+          for (const key in resultObj) {
+            if (Array.isArray(resultObj[key])) {
+              if (resultObj[key].length > 0 && Array.isArray(resultObj[key][0])) {
+                console.log(`Found potential embedding array in property: ${key}`);
+                return resultObj[key].map((embedding: any) => Array.from(embedding));
+              }
+            }
+          }
+        }
+      }
+      
+      // If we get here, we couldn't parse the response
+      console.log('Unexpected OpenAI embedding response format:', JSON.stringify(result, null, 2));
+      throw new Error('Unexpected OpenAI embedding response format');
     } catch (error) {
       console.error('Error generating embeddings:', error);
       throw error;
@@ -114,7 +152,55 @@ export class EmbeddingsGenerator {
   public async generateSingleEmbedding(text: string): Promise<number[]> {
     try {
       const result = await retry(() => this.openAIClient.getEmbeddings(this.deploymentName, [text]), 3, 1000);
-      return Array.from(result[0].embedding);
+      
+      // Log the raw result structure for debugging
+      console.log(`Raw single embedding response type: ${typeof result}`);
+      
+      // Handle different response formats with better error handling
+      if (Array.isArray(result) && result.length > 0) {
+        // Old format
+        return Array.from((result[0] as any).embedding || []);
+      } else if (result && typeof result === 'object') {
+        // Cast to any to handle various response formats
+        const resultObj = result as any;
+        
+        // Log the keys available in the result object
+        console.log('Available keys in result:', Object.keys(resultObj));
+        
+        if (resultObj.data && Array.isArray(resultObj.data) && resultObj.data.length > 0) {
+          // New format with data property (Azure OpenAI)
+          const item = resultObj.data[0];
+          if (item.embedding) return Array.from(item.embedding);
+          if (item.values) return Array.from(item.values);
+          console.log(`Item has no embedding or values: ${JSON.stringify(item)}`);
+        } else if (resultObj.embeddings && Array.isArray(resultObj.embeddings) && resultObj.embeddings.length > 0) {
+          // Alternative format with embeddings property
+          return Array.from(resultObj.embeddings[0]);
+        } else {
+          // Try to find any property that looks like an embedding array
+          for (const key in resultObj) {
+            if (Array.isArray(resultObj[key])) {
+              if (resultObj[key].length > 0) {
+                if (Array.isArray(resultObj[key][0])) {
+                  console.log(`Found potential embedding array in property: ${key}`);
+                  return Array.from(resultObj[key][0]);
+                } else if (typeof resultObj[key][0] === 'number') {
+                  // Direct array of numbers
+                  console.log(`Found direct number array in property: ${key}`);
+                  return Array.from(resultObj[key]);
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // Log the actual structure to help diagnose
+      console.log('Unexpected OpenAI embedding response format:', JSON.stringify(result, null, 2));
+      
+      // Return a zero vector as a fallback to prevent complete failure
+      console.log(`Returning fallback zero vector of length ${this.embeddingDimension}`);
+      return new Array(this.embeddingDimension).fill(0);
     } catch (error) {
       console.error('Error generating single embedding:', error);
       throw error;

@@ -7,7 +7,7 @@ import { Send, Paperclip, Mic, MicOff } from "lucide-react"
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
 import { MessageBubble } from "./message-bubble"
-import { QuizCard } from "./quiz-card"
+import QuizCard from "./quiz-card"
 import { FlashCard } from "./flash-card"
 
 export interface Message {
@@ -51,7 +51,7 @@ export function ChatInterface({ selectedCourse, searchQuery }: ChatInterfaceProp
     scrollToBottom()
   }, [messages])
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputValue.trim()) return
 
     const userMessage: Message = {
@@ -63,49 +63,60 @@ export function ChatInterface({ selectedCourse, searchQuery }: ChatInterfaceProp
 
     setMessages((prev) => [...prev, userMessage])
     setInputValue("")
-
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        {
-          type: "ai" as const,
-          content:
-            "Excellent question about defense strategies. Let me explain the operational concept with some examples from recent military exercises and provide you with additional resources to explore.",
+    
+    // Show typing indicator
+    const typingIndicator: Message = {
+      id: 'typing-indicator',
+      type: 'ai',
+      content: '...',
+      timestamp: new Date(),
+    }
+    
+    setMessages((prev) => [...prev, typingIndicator])
+    
+    try {
+      // Send request to the backend API
+      const response = await fetch('/api/ChatCompletion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        {
-          type: "quiz" as const,
-          content: "Let's test your understanding of tactical procedures with a quick quiz:",
-          quizData: {
-            question: "Which principle is most important in establishing a defensive perimeter?",
-            options: ["Mutual support", "Depth", "All-around security", "Dispersal"],
-            correct: 2,
-            explanation:
-              "All-around security ensures the defensive position cannot be surprised from any direction and is prepared to respond to threats from any angle.",
-          },
-        },
-        {
-          type: "flashcard" as const,
-          content: "Here's a key concept to remember for your defense training:",
-          flashcardData: {
-            front: "What is CBRN?",
-            back: "Chemical, Biological, Radiological, and Nuclear defense - the protective measures taken in situations where these hazards may be present.",
-          },
-        },
-      ]
-
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)]
-
+        body: JSON.stringify({
+          message: userMessage.content,
+          conversation: messages.filter(m => m.id !== 'typing-indicator'),
+          courseId: selectedCourse || undefined,
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      // Create AI message from response
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        type: randomResponse.type,
-        content: randomResponse.content,
+        type: "ai",
+        content: data.message.content,
         timestamp: new Date(),
-        quizData: randomResponse.quizData,
-        flashcardData: randomResponse.flashcardData,
       }
-
-      setMessages((prev) => [...prev, aiMessage])
-    }, 1000)
+      
+      // Remove typing indicator and add AI response
+      setMessages((prev) => prev.filter(m => m.id !== 'typing-indicator').concat([aiMessage]))
+    } catch (error) {
+      console.error('Error fetching chat response:', error)
+      
+      // Remove typing indicator and add error message
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: "ai",
+        content: "I'm sorry, I couldn't process your request. Please try again.",
+        timestamp: new Date(),
+      }
+      
+      setMessages((prev) => prev.filter(m => m.id !== 'typing-indicator').concat([errorMessage]))
+    }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -126,8 +137,8 @@ export function ChatInterface({ selectedCourse, searchQuery }: ChatInterfaceProp
           <div key={message.id}>
             {message.type === "quiz" ? (
               <QuizCard data={message.quizData} />
-            ) : message.type === "flashcard" ? (
-              <FlashCard data={message.flashcardData} />
+            ) : message.type === "flashcard" && message.flashcardData ? (
+              <FlashCard term={message.flashcardData.term} definition={message.flashcardData.definition} />
             ) : (
               <MessageBubble message={message as UserAiMessage} />
             )}

@@ -1,11 +1,10 @@
 /**
  * PDF Indexer Function
- * Indexes PDF chunks from the student-tools-chunked container into Azure AI Search
+ * Indexes PDF chunks from the students-tools-chunked container into Azure AI Search
  */
 
 import { app, InvocationContext } from "@azure/functions";
 import { BlobServiceClient, BlockBlobClient } from "@azure/storage-blob";
-import { DefaultAzureCredential } from "@azure/identity";
 import { DocumentChunk } from "../../models/DocumentChunk";
 import { SearchIndexManager } from "../services/indexing/SearchIndexManager";
 import { SearchDataIndexer } from "../services/indexing/SearchDataIndexer";
@@ -38,7 +37,6 @@ async function pdfIndexerFunction(blob: unknown, context: InvocationContext): Pr
     const blobName = blobPathParts.slice(1).join('/');
     
     // Get configuration from environment variables
-    const storageAccountName = process.env.STORAGE_ACCOUNT_NAME;
     const searchEndpoint = process.env.AZURE_SEARCH_ENDPOINT;
     const searchIndexName = process.env.AZURE_SEARCH_INDEX_NAME || "document-chunks";
     const searchApiKey = process.env.AZURE_SEARCH_API_KEY;
@@ -47,8 +45,14 @@ async function pdfIndexerFunction(blob: unknown, context: InvocationContext): Pr
     const embeddingDeployment = process.env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT || "text-embedding-ada-002";
     
     // Validate required environment variables
+    const storageAccountName = process.env.STORAGE_ACCOUNT_NAME;
+    const storageConnectionString = process.env.AzureWebJobsStorage;
+    
     if (!storageAccountName) {
       throw new Error("Missing STORAGE_ACCOUNT_NAME environment variable");
+    }
+    if (!storageConnectionString) {
+      throw new Error("Missing AzureWebJobsStorage environment variable");
     }
     if (!searchEndpoint) {
       throw new Error("Missing AZURE_SEARCH_ENDPOINT environment variable");
@@ -57,12 +61,8 @@ async function pdfIndexerFunction(blob: unknown, context: InvocationContext): Pr
       throw new Error("Missing AZURE_OPENAI_ENDPOINT environment variable");
     }
     
-    // Connect to Azure services using DefaultAzureCredential or API keys
-    const credential = new DefaultAzureCredential();
-    const blobServiceClient = new BlobServiceClient(
-      `https://${storageAccountName}.blob.core.windows.net`,
-      credential
-    );
+    // Connect to Azure services using connection string instead of DefaultAzureCredential
+    const blobServiceClient = BlobServiceClient.fromConnectionString(storageConnectionString);
     
     // Get the container client
     const containerClient = blobServiceClient.getContainerClient(containerName);
@@ -75,6 +75,12 @@ async function pdfIndexerFunction(blob: unknown, context: InvocationContext): Pr
     // Parse the metadata JSON
     const chunkMetadata = JSON.parse(metadataContent) as DocumentChunk;
     context.log(`Processing metadata for chunk: ${chunkMetadata.id}`);
+    
+    // Skip if this chunk already has embeddings to avoid an infinite loop
+    if (chunkMetadata.embedding && Array.isArray(chunkMetadata.embedding) && chunkMetadata.embedding.length > 0) {
+      context.log(`Skipping chunk ${chunkMetadata.id} as it already has embeddings`);
+      return;
+    }
     
     // Initialize the embeddings generator
     const embeddingsGenerator = new EmbeddingsGenerator(
@@ -89,6 +95,36 @@ async function pdfIndexerFunction(blob: unknown, context: InvocationContext): Pr
     
     context.log(`Generated embeddings for chunk: ${enrichedChunk.id}`);
     
+    // Validate embeddings are in the expected format
+    if (!enrichedChunk.embedding || !Array.isArray(enrichedChunk.embedding)) {
+      context.log(`Warning: Missing or invalid embedding for chunk ${enrichedChunk.id}. Type: ${typeof enrichedChunk.embedding}`);
+      // Create a fallback embedding if needed (all zeros)
+      enrichedChunk.embedding = new Array(1536).fill(0);
+    }
+    
+    context.log(`Embedding vector length: ${enrichedChunk.embedding.length}`);
+    
+    // Prepare a flattened version of the chunk for indexing
+    // This resolves the issue with nested properties like 'location'
+    const flattenedChunk = {
+      id: enrichedChunk.id,
+      documentId: enrichedChunk.documentId,
+      filename: enrichedChunk.filename,
+      content: enrichedChunk.content,
+      // Use the embedding field for vector search
+      embedding: enrichedChunk.embedding,
+      chunkIndex: enrichedChunk.chunkIndex,
+      contentType: enrichedChunk.contentType,
+      title: enrichedChunk.title || '',
+      classification: enrichedChunk.classification || 'Unclassified',
+      contentHash: enrichedChunk.contentHash || '',
+      createdAt: enrichedChunk.createdAt,
+      updatedAt: enrichedChunk.updatedAt,
+      // Flattening the location property
+      pageNumber: enrichedChunk.location?.pageNumber || 0
+      // Removed summary field as it's not in the search index schema
+    };
+    
     // Initialize the search index manager and ensure index exists
     const searchIndexManager = new SearchIndexManager(
       searchEndpoint,
@@ -101,8 +137,8 @@ async function pdfIndexerFunction(blob: unknown, context: InvocationContext): Pr
     // Initialize the search data indexer
     const searchDataIndexer = new SearchDataIndexer(searchIndexManager);
     
-    // Index the chunk
-    await searchDataIndexer.indexChunks([enrichedChunk]);
+    // Index the flattened chunk
+    await searchDataIndexer.indexChunks([flattenedChunk]);
     
     context.log(`Successfully indexed chunk: ${enrichedChunk.id}`);
     
@@ -149,6 +185,6 @@ async function streamToString(readableStream: NodeJS.ReadableStream | undefined)
 // Register the function with Azure Functions
 app.storageBlob('pdfIndexer', {
   connection: "AzureWebJobsStorage",
-  path: "student-tools-chunked/{name}",
+  path: "students-tools-chunked/{name}",
   handler: pdfIndexerFunction
 });

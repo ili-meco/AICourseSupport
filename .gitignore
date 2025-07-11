@@ -8,7 +8,7 @@
 !.funcignore
 !.gitignore
 !host.json
-!local.settings.json
+# local.settings.json - NEVER COMMIT THIS FILE (contains secrets)
 !local.settings.example.json
 !package.json
 !package-lock.json

@@ -2,12 +2,14 @@
   "name": "dnd-sp-functions",
   "version": "1.0.0",
   "description": "Azure Functions project for DND-SP application",
-  "main": "dist/src/functions/*.js",
+  "main": "dist/src/functions/**/*.js",
   "scripts": {
     "build": "tsc",
+    "build:backend": "tsc -p tsconfig.backend.json",
     "watch": "tsc -w",
+    "watch:backend": "tsc -w -p tsconfig.backend.json",
     "clean": "rimraf dist",
-    "prestart": "npm run clean && npm run build",
+    "prestart": "npm run clean && npm run build:backend",
     "start": "func start",
     "test": "echo \"No tests yet...\""
   },

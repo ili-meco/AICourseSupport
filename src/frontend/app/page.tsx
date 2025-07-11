@@ -12,8 +12,13 @@ export default function EducationalChatbot() {
   const [selectedCourse, setSelectedCourse] = useState("Military Leadership Fundamentals")
   const [searchQuery, setSearchQuery] = useState("")
   const [showDocumentPanel, setShowDocumentPanel] = useState(true)
-  const { theme, setTheme } = useTheme()
-  const { isAuthenticated, isLoading, user, signIn, signOut } = useAuth()
+  
+  // Using nullish coalescing for safer access to context values
+  const themeContext = useTheme()
+  const theme = themeContext?.theme || "system"
+  const setTheme = themeContext?.setTheme || (() => {})
+  
+  const { user, isLoading, isAuthenticated, login, logout, signIn, signOut } = useAuth()
   const [syncStatus, setSyncStatus] = useState<{
     isSyncing: boolean;
     lastSync: Date | null;

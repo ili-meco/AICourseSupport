@@ -1,7 +1,7 @@
 /**
  * Test script for PDF Chunking function
  * 
- * This script simulates uploading a PDF to the student-tools container
+ * This script simulates uploading a PDF to the students-tools container
  * to test the PDF chunking functionality
  */
 
@@ -11,9 +11,9 @@ const path = require('path');
 const fs = require('fs');
 
 // Configuration - update these values or use environment variables
-const STORAGE_ACCOUNT_NAME = process.env.STORAGE_ACCOUNT_NAME || '<your-storage-account>';
-const INPUT_CONTAINER_NAME = "student-tools";
-const OUTPUT_CONTAINER_NAME = "student-tools-chunked";
+const STORAGE_ACCOUNT_NAME = process.env.STORAGE_ACCOUNT_NAME || 'dndblobpoc';
+const INPUT_CONTAINER_NAME = "students-tools";
+const OUTPUT_CONTAINER_NAME = "students-tools-chunked";
 const TEST_PDF_PATH = process.env.TEST_PDF_PATH || path.join(__dirname, '../test-files/sample.pdf');
 
 // Create directory structure if it doesn't exist
@@ -27,15 +27,22 @@ async function main() {
   try {
     console.log('Starting PDF chunking test...');
     
-    // Use DefaultAzureCredential for authentication
-    const credential = new DefaultAzureCredential();
+    // Get connection string from local.settings.json
+    const localSettingsPath = path.join(__dirname, '../local.settings.json');
+    let connectionString;
+    
+    if (fs.existsSync(localSettingsPath)) {
+      const localSettings = JSON.parse(fs.readFileSync(localSettingsPath, 'utf8'));
+      connectionString = localSettings.Values.AzureWebJobsStorage;
+      
+      console.log(`Using connection string from local.settings.json`);
+    } else {
+      throw new Error("local.settings.json file not found. Please create it with valid Azure storage credentials.");
+    }
     
     // Connect to blob storage
     console.log(`Connecting to storage account: ${STORAGE_ACCOUNT_NAME}`);
-    const blobServiceClient = new BlobServiceClient(
-      `https://${STORAGE_ACCOUNT_NAME}.blob.core.windows.net`,
-      credential
-    );
+    const blobServiceClient = BlobServiceClient.fromConnectionString(connectionString);
     
     // Ensure input container exists
     const inputContainerClient = blobServiceClient.getContainerClient(INPUT_CONTAINER_NAME);
