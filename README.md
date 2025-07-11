@@ -1,247 +1,291 @@
-# DND-SP Azure Functions
+# AI Course Support System
 
-This project contains Azure Functions built with TypeScript using the Azure Functions v4 programming model.
+An AI-powered educational assistant that processes course materials and provides intelligent tutoring through a retrieval-augmented generation (RAG) system. The system automatically processes PDF documents, creates searchable indexes, and provides contextual answers with document citations.
 
-## Features
+## Architecture Overview
 
-- **PDF Chunking**: Automatically splits PDFs uploaded to blob storage into smaller chunks for easier processing and analysis. [More details](./PDF-CHUNKER-README.md)
+This system consists of three main components:
 
-## Prerequisites
+1. **Document Processing Pipeline** (Azure Functions)
+   - PDF chunking and text extraction
+   - Vector embedding generation
+   - Azure AI Search indexing
 
-- [Node.js](https://nodejs.org/) (LTS version)
-- [Azure Functions Core Tools](https://docs.microsoft.com/en-us/azure/azure-functions/functions-run-local) v4.x
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (for deployment)
+2. **AI Chat Backend** (FastAPI)
+   - RAG implementation with Azure OpenAI
+   - Semantic search across documents
+   - Educational prompt engineering
 
-## Getting Started
+3. **Frontend Interface** (Next.js)
+   - Chat interface for student interactions
+   - Document reference display
+   - Course material navigation
 
-1. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+## 🚀 Quick Start
 
-2. **Build the project:**
-   ```bash
-   npm run build
-   ```
+### Prerequisites
 
-3. **Configure environment variables:**
+- Node.js 18.x or later
+- Azure subscription with the following services:
+  - Azure Functions
+  - Azure Blob Storage
+  - Azure AI Search
+  - Azure OpenAI
+- Python 3.9+ (for FastAPI backend)
 
-   Copy `local.settings.example.json` to `local.settings.json` and update with your settings:
-   ```json
-   {
-     "IsEncrypted": false,
-     "Values": {
-       "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-       "FUNCTIONS_WORKER_RUNTIME": "node",
-       "STORAGE_ACCOUNT_NAME": "<your-storage-account>",
-       "INPUT_CONTAINER_NAME": "pdf-input",
-       "OUTPUT_CONTAINER_NAME": "pdf-chunks",
-       "PAGES_PER_CHUNK": "10",
-       "SHAREPOINT_SITE_URL": "<your-sharepoint-site-url>",
-       "SHAREPOINT_CLIENT_ID": "<your-client-id>",
-       "SHAREPOINT_CLIENT_SECRET": "<your-client-secret>",
-       "SHAREPOINT_TENANT_ID": "<your-tenant-id>",
-       "SHAREPOINT_LIBRARY_NAME": "<your-library-name>",
-       "BLOB_STORAGE_CONNECTION_STRING": "<your-blob-storage-connection-string>",
-       "BLOB_CONTAINER_NAME": "<your-blob-container>"
-     }
-   }
-   ```
+### 1. Azure Services Setup
 
-4. **Start the function app locally:**
-   ```bash
-   npm start
-   ```
+#### Required Azure Resources:
+```bash
+# Create resource group
+az group create --name ai-course-support --location eastus
 
-   The functions will be available at: 
-   - SharePoint Sync: `http://localhost:7071/api/SharePointToBlobSync`
-   - PDF Chunker: Triggered by blob uploads to the input container
+# Create storage account
+az storage account create --name <storage-name> --resource-group ai-course-support --location eastus --sku Standard_LRS
 
-## Available Functions
+# Create Azure AI Search service
+az search service create --name <search-name> --resource-group ai-course-support --location eastus --sku Basic
 
-### SharePointToBlobSync
-
-This HTTP-triggered function synchronizes documents from a SharePoint library to Azure Blob Storage. It:
-1. Authenticates with Microsoft Graph API using client credentials
-2. Retrieves documents from a specified SharePoint library
-3. Downloads and extracts text from documents (PDF, DOCX, PPTX)
-4. Stores extracted text as JSON in Azure Blob Storage
-5. For PDFs, also uploads raw PDF data to trigger PDF chunking
-
-### PDFChunker (Proof of Concept)
-
-This blob-triggered function splits PDF documents into smaller chunks by page ranges. It:
-1. Is triggered when a PDF is uploaded to a specified container
-2. Downloads the PDF and splits it into overlapping chunks
-3. Stores each chunk as a separate PDF file
-4. Adds metadata to track relationships between chunks
-
-See [PDF-CHUNKER-README.md](./PDF-CHUNKER-README.md) for more details on the PDF chunking functionality.
-
-### SharePointToBlobSyncV2
-- **Type:** HTTP Trigger
-- **Auth Level:** Function
-- **Methods:** GET, POST
-- **URL:** `/api/SharePointToBlobSyncV2`
-
-**Usage:**
-- GET/POST: `http://localhost:7071/api/SharePointToBlobSyncV2?fileTypes=pdf,docx,pptx&daysBack=30&maxFiles=100`
-
-This function synchronizes SharePoint Online documents to Azure Blob Storage, extracting text content from various document types.
-
-## Project Structure
-
-```
-├── src/
-│   ├── functions/          # Function implementations
-│   │   └── SharePointToBlobSyncV2.ts  # SharePoint to Blob sync function
-│   ├── utils/              # Utility functions
-│   └── frontend/           # React frontend application
-│       ├── app/            # Next.js App Router pages
-│       │   ├── globals.css # Global CSS
-│       │   └── page.tsx    # Main page component
-│       ├── components/     # React components
-│       │   ├── ui/         # UI components
-│       │   └── ...         # Feature components
-│       └── lib/            # Frontend utilities
-├── .vscode/                # VS Code settings
-├── host.json               # Function app configuration
-├── local.settings.json     # Local environment settings
-├── package.json            # Node.js dependencies
-└── tsconfig.json           # TypeScript configuration
+# Create Azure OpenAI service
+az cognitiveservices account create --name <openai-name> --resource-group ai-course-support --location eastus --kind OpenAI --sku S0
 ```
 
-## Development Scripts
+#### Required Blob Storage Containers:
+- `students-tools` (for original PDF uploads)
+- `students-tools-chunked` (for processed document chunks)
 
-### Backend (Azure Functions)
-- `npm run build` - Build TypeScript to JavaScript
-- `npm run watch` - Watch for changes and rebuild
-- `npm run clean` - Clean built files
-- `npm start` - Start the function app locally
-- `npm test` - Run tests (placeholder)
+### 2. Backend Setup (FastAPI)
 
-### Frontend (Next.js)
-- `cd src/frontend && npm run dev` - Start Next.js development server
-- `cd src/frontend && npm run build` - Build production frontend
-- `cd src/frontend && npm run start` - Start production frontend
-- `cd src/frontend && npm run lint` - Run linting
+```bash
+# Navigate to API directory
+cd src/api
 
-## Configuration
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-### Backend Configuration
-Update `local.settings.json` to configure local environment variables:
+# Install dependencies
+pip install -r requirements.txt
 
+# Create .env file with your Azure credentials
+cp .env.example .env
+# Edit .env with your Azure service credentials
+
+# Start the FastAPI server
+python main.py
+```
+
+### 3. Azure Functions Setup
+
+```bash
+# Install Azure Functions Core Tools
+npm install -g azure-functions-core-tools@4 --unsafe-perm true
+
+# Install dependencies
+npm install
+
+# Copy and configure local settings
+cp local.settings.example.json local.settings.json
+# Edit local.settings.json with your Azure credentials
+
+# Start functions locally
+npm start
+```
+
+### 4. Frontend Setup (Next.js)
+
+```bash
+# Navigate to frontend directory
+cd src/frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+## 📋 Required Environment Variables
+
+### Azure Functions (`local.settings.json`)
 ```json
 {
   "IsEncrypted": false,
   "Values": {
+    "AzureWebJobsStorage": "<storage-connection-string>",
     "FUNCTIONS_WORKER_RUNTIME": "node",
-    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-    "SHAREPOINT_SITE_URL": "https://yourtenant.sharepoint.com/sites/yoursite",
-    "SHAREPOINT_CLIENT_ID": "your-client-id",
-    "SHAREPOINT_CLIENT_SECRET": "your-client-secret",
-    "SHAREPOINT_TENANT_ID": "your-tenant-id",
-    "SHAREPOINT_LIBRARY_NAME": "Documents",
-    "BLOB_STORAGE_CONNECTION_STRING": "your-connection-string",
-    "BLOB_CONTAINER_NAME": "documents"
+    "AZURE_SEARCH_ENDPOINT": "https://<search-name>.search.windows.net",
+    "AZURE_SEARCH_API_KEY": "<search-admin-key>",
+    "AZURE_SEARCH_INDEX_NAME": "document-chunks",
+    "AZURE_OPENAI_ENDPOINT": "https://<openai-name>.openai.azure.com",
+    "AZURE_OPENAI_API_KEY": "<openai-api-key>",
+    "AZURE_OPENAI_EMBEDDING_DEPLOYMENT": "text-embedding-ada-002",
+    "PAGES_PER_CHUNK": "10"
   }
 }
 ```
 
-### Frontend Configuration
-Create a `.env.local` file in the `/src/frontend` directory:
+### FastAPI Backend (`src/api/.env`)
+```env
+AZURE_SEARCH_ENDPOINT=https://<search-name>.search.windows.net
+AZURE_SEARCH_API_KEY=<search-admin-key>
+AZURE_SEARCH_INDEX_NAME=document-chunks
+AZURE_OPENAI_ENDPOINT=https://<openai-name>.openai.azure.com
+AZURE_OPENAI_API_KEY=<openai-api-key>
+AZURE_OPENAI_COMPLETION_DEPLOYMENT=gpt-4o-mini
+ALLOWED_ORIGINS=http://localhost:3000
+```
+
+### Frontend (`src/frontend/.env.local`)
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+## 🔧 Key Components
+
+### 1. PDF Chunking Function (`src/functions/pdfchunker/PDFChunker.ts`)
+- **Trigger**: Blob storage events when PDFs are uploaded
+- **Process**: Splits PDFs into overlapping chunks, extracts text
+- **Output**: Chunked PDFs and metadata in separate container
+
+### 2. Document Indexing Function (`src/functions/indexing/PDFIndexer.ts`)
+- **Trigger**: Blob storage events for chunked documents
+- **Process**: Generates embeddings, creates search index
+- **Dependencies**: Embeddings Generator, Search Index Manager
+
+### 3. Chat API (`src/api/main.py`)
+- **Endpoints**: `/api/ChatCompletion`, `/health`
+- **Features**: RAG with Azure AI Search, educational prompt engineering
+- **Response**: AI answers with document citations
+
+### 4. Frontend Interface (`src/frontend/`)
+- **Components**: Chat interface, document panel, navigation
+- **Features**: Real-time chat, document references, course selection
+
+## 📁 Project Structure
 
 ```
-NEXT_PUBLIC_FUNCTION_APP_URL=http://localhost:7071
-NEXT_PUBLIC_AZURE_AD_CLIENT_ID=your-client-id
-NEXT_PUBLIC_AZURE_AD_TENANT_ID=your-tenant-id
+├── src/
+│   ├── functions/                    # Azure Functions
+│   │   ├── pdfchunker/              # PDF processing
+│   │   │   └── PDFChunker.ts        # Main chunking function
+│   │   ├── indexing/                # Document indexing
+│   │   │   └── PDFIndexer.ts        # Indexing function
+│   │   └── services/                # Shared services
+│   │       ├── indexing/            # Search and embedding services
+│   │       └── utils/               # Utility functions
+│   ├── api/                         # FastAPI backend
+│   │   ├── main.py                  # Main API application
+│   │   ├── requirements.txt         # Python dependencies
+│   │   └── .env                     # Environment variables
+│   ├── frontend/                    # Next.js frontend
+│   │   ├── app/                     # App router pages
+│   │   ├── components/              # React components
+│   │   ├── lib/                     # Utilities and services
+│   │   └── package.json             # Frontend dependencies
+│   └── models/                      # Shared TypeScript models
+├── host.json                        # Function app configuration
+├── local.settings.json              # Local development settings
+├── package.json                     # Function dependencies
+└── README.md                        # This file
 ```
 
-### Adding New Functions
+## 🔄 Data Flow
 
-Create new functions using the Azure Functions Core Tools:
+1. **Document Upload**: PDFs uploaded to `students-tools` container
+2. **Chunking**: Azure Function processes PDFs into chunks
+3. **Indexing**: Another Function creates embeddings and search index
+4. **Query**: User asks question through web interface
+5. **Search**: System performs hybrid search on indexed content
+6. **Generate**: Azure OpenAI generates response using retrieved documents
+7. **Display**: Response shown with document citations
 
+## 🚀 Deployment
+
+### Azure Functions Deployment
 ```bash
-func new --name YourFunctionName --template "Template Name"
+# Build and deploy functions
+npm run build
+func azure functionapp publish <your-function-app-name>
 ```
 
-Available templates:
-- HTTP trigger
-- Timer trigger
-- Blob trigger
-- Queue trigger
-- And more...
+### FastAPI Deployment (Azure Container Instances)
+```bash
+# Build Docker image
+docker build -t ai-course-api src/api/
 
-## Deployment
+# Deploy to Azure Container Instances
+az container create --resource-group ai-course-support --name ai-course-api --image ai-course-api --cpu 1 --memory 2 --port 8000
+```
 
-### Backend Deployment
+### Frontend Deployment (Azure Static Web Apps)
+```bash
+# Build frontend
+cd src/frontend
+npm run build
 
-1. **Create a Function App in Azure:**
-   ```bash
-   az functionapp create --resource-group myResourceGroup --consumption-plan-location westus --runtime node --runtime-version 18 --functions-version 4 --name myFunctionApp --storage-account myStorageAccount
-   ```
+# Deploy to Azure Static Web Apps
+az staticwebapp create --name ai-course-frontend --resource-group ai-course-support --source . --branch main --app-location "src/frontend" --output-location ".next"
+```
 
-2. **Deploy the function:**
-   ```bash
-   func azure functionapp publish myFunctionApp
-   ```
+## 🔍 Usage
 
-3. **Configure environment variables:**
-   ```bash
-   az functionapp config appsettings set --name myFunctionApp --resource-group myResourceGroup --settings "SHAREPOINT_SITE_URL=https://yourtenant.sharepoint.com/sites/yoursite"
-   ```
+1. **Upload Documents**: Place PDF course materials in the `students-tools` blob container
+2. **Wait for Processing**: Functions automatically chunk and index documents
+3. **Start Chatting**: Use the web interface to ask questions about course content
+4. **Review References**: Check document citations provided with each response
 
-### Frontend Deployment
+## 🛠️ Customization
 
-1. **Create a Static Web App:**
-   ```bash
-   az staticwebapp create --name myStaticWebApp --resource-group myResourceGroup --source https://github.com/yourusername/yourrepo --branch main --app-location "src/frontend" --api-location "." --output-location ".next"
-   ```
+### Adding New Document Types
+- Modify `PDFChunker.ts` to handle additional file formats
+- Update text extraction logic in the chunking function
 
-2. **Or deploy to Azure App Service:**
-   ```bash
-   cd src/frontend
-   npm run build
-   az webapp deployment source config-zip --resource-group myResourceGroup --name myWebApp --src ./out.zip
-   ```
+### Adjusting Chunk Size
+- Change `PAGES_PER_CHUNK` environment variable
+- Rebuild and redeploy functions
 
-## Best Practices
+### Modifying AI Behavior
+- Edit the system prompt in `src/api/main.py`
+- Adjust OpenAI parameters (temperature, max_tokens)
 
-### Backend
-- Use the latest Azure Functions runtime (v4)
-- Implement proper error handling and logging
-- Use TypeScript for type safety
-- Store secrets in Azure Key Vault or environment variables
-- Use managed identities where possible
-- Implement retry policies for external services
-- Use batch processing for large document sets
+## 📊 Monitoring
 
-### Frontend
-- Follow component-based architecture
-- Implement responsive design
-- Follow accessibility guidelines
-- Use TypeScript for type safety
-- Implement proper error handling
-- Use environment variables for configuration
-- Implement authentication and authorization
+- **Function Logs**: View in Azure Portal or Application Insights
+- **API Health**: Check `/health` endpoint
+- **Search Performance**: Monitor Azure AI Search metrics
+- **OpenAI Usage**: Track token consumption in Azure OpenAI
 
-## AI Chatbot Integration
+## 🔧 Troubleshooting
 
-See the following documentation for more details:
-- [Frontend Organization](./src/frontend/ORGANIZATION.md)
-- [Backend-Frontend Integration](./src/frontend/INTEGRATION.md)
-- [Frontend Setup](./src/frontend/README.md)
-- Implement proper error handling
-- Use environment variables for configuration
-- Follow TypeScript best practices
-- Use extension bundles for bindings
-- Implement proper logging
+### Common Issues
 
-## Troubleshooting
+1. **Functions not triggering**: Check blob storage connection strings
+2. **Search returning no results**: Verify index exists and has data
+3. **OpenAI errors**: Check API key and deployment names
+4. **Frontend not connecting**: Verify API URL in environment variables
 
-- Ensure you have the correct Node.js version (18.x)
-- Make sure Azure Functions Core Tools is updated to v4.x
-- Check `local.settings.json` for proper configuration
-- Use `func start --verbose` for detailed logging
+### Debug Commands
+```bash
+# Check function logs
+func start --verbose
 
-For more information, visit the [Azure Functions documentation](https://docs.microsoft.com/en-us/azure/azure-functions/).
+# Test API health
+curl http://localhost:8000/health
+
+# Check search index
+curl -H "api-key: <search-key>" "https://<search-name>.search.windows.net/indexes/document-chunks?api-version=2023-11-01"
+```
+
+## 📝 Support
+
+For issues and questions:
+1. Check the troubleshooting section above
+2. Review Azure service logs
+3. Verify all environment variables are set correctly
+4. Ensure all required Azure services are running
+
+## 🔄 Version History
+
+- **v1.0.0**: Initial release with PDF processing, RAG chat, and web interface
+- **Current**: Enhanced error handling, improved document citations, markdown support

@@ -18,6 +18,12 @@ export interface Message {
   attachments?: string[]
   quizData?: any
   flashcardData?: any
+  relevantDocuments?: Array<{
+    id: string
+    name: string
+    url: string
+    relevanceScore: number
+  }>
 }
 
 export type UserAiMessage = Omit<Message, "type" | "quizData" | "flashcardData"> & {
@@ -100,6 +106,7 @@ export function ChatInterface({ selectedCourse, searchQuery }: ChatInterfaceProp
         type: "ai",
         content: data.message.content,
         timestamp: new Date(),
+        relevantDocuments: data.relevantDocuments || []
       }
       
       // Remove typing indicator and add AI response
@@ -138,7 +145,7 @@ export function ChatInterface({ selectedCourse, searchQuery }: ChatInterfaceProp
             {message.type === "quiz" ? (
               <QuizCard data={message.quizData} />
             ) : message.type === "flashcard" && message.flashcardData ? (
-              <FlashCard term={message.flashcardData.term} definition={message.flashcardData.definition} />
+              <FlashCard flashcardData={message.flashcardData} />
             ) : (
               <MessageBubble message={message as UserAiMessage} />
             )}

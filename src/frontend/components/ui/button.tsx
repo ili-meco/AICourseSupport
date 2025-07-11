@@ -1,20 +1,6 @@
 import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
 import { cn } from "../../lib/utils"
-
-// Import the actual Slot component if available, otherwise use a custom implementation
-let Slot: any;
-try {
-  Slot = require("@radix-ui/react-slot").Slot;
-} catch (e) {
-  // Simple fallback if Radix UI Slot is not available
-  Slot = React.forwardRef(({ children, ...props }: any, ref: any) => {
-    if (React.isValidElement(children)) {
-      return React.cloneElement(children, { ...props, ref });
-    }
-    return <span {...props} ref={ref}>{children}</span>;
-  });
-  Slot.displayName = "Slot";
-}
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
